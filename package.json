@@ -24,6 +24,7 @@
     "react-icons": "^5.1.0",
     "react-resizable-panels": "^2.0.17",
     "solc": "^0.8.25",
+    "sonner": "^1.7.1",
     "tailwind-merge": "^2.2.2",
     "tailwindcss-animate": "^1.0.7",
     "viem": "2.x",

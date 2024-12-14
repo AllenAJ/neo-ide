@@ -2,6 +2,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import '@rainbow-me/rainbowkit/styles.css';
+import { Toaster } from 'sonner';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -10,6 +11,7 @@ export const metadata = {
   description: "AI powered IDE for deploying contracts to Mantle Testnet",
 };
 
+
 export default function RootLayout({
   children,
 }: {
@@ -17,8 +19,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className+" bg-gray-900 "}>
-        <Providers >{children}</Providers></body>
+      <body className={inter.className + " bg-gray-900 "}>
+        <Providers>{children}</Providers>
+        <Toaster position="top-right" />
+      </body>
     </html>
   );
 }
