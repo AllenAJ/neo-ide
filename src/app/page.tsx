@@ -44,7 +44,7 @@ pragma solidity ^0.8.19;`);
 
   const publicClient = createPublicClient({
     chain: mantleSepoliaTestnet,
-    transport: http("https://rpc.testnet.mantle.xyz"),
+    transport: http("https://rpc.sepolia.mantle.xyz"),
   });
 
   const {
