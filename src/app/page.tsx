@@ -24,6 +24,8 @@ import { useAccount, useWalletClient } from 'wagmi';
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Wand2, Code2, Rocket, Settings2, LoaderIcon } from "lucide-react";
+import { LogMessage } from './types/types';
+import ConsolePanel from '@/components/ConsolePanel';
 
 export default function Home() {
   const [code, setCode] = useState(`//SPDX-License-Identfier: MIT
@@ -38,6 +40,7 @@ pragma solidity ^0.8.19;`);
   const [receipt, setReceipt] = useState<TransactionReceipt | undefined>(undefined);
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
+  const [logs, setLogs] = useState<LogMessage[]>([]);
 
   const publicClient = createPublicClient({
     chain: mantleSepoliaTestnet,
@@ -98,8 +101,22 @@ pragma solidity ^0.8.19;`);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [code]);
 
+  const addLog = (type: LogMessage['type'], message: string) => {
+    setLogs(prev => [...prev, {
+      type,
+      message,
+      timestamp: new Date()
+    }]);
+  };
+
+  const clearLogs = () => {
+    setLogs([]);
+  };
+
   const compileSourceCode = () => {
     setCompiled(1);
+    addLog('info', 'Starting compilation...');
+    
     toast.promise(
       compile(code)
         .then((contractData) => {
@@ -107,12 +124,16 @@ pragma solidity ^0.8.19;`);
           const data = contractData[0];
           setByteCode(data.byteCode);
           setAbi(JSON.stringify(data.abi));
+          addLog('success', 'Compilation successful');
+          addLog('info', `Contract Name: ${data.contractName}`);
+          addLog('info', `ABI Length: ${data.abi.length} functions`);
         }),
       {
         loading: 'Compiling contract...',
         success: 'Contract compiled successfully!',
         error: (err) => {
           setCompiled(0);
+          addLog('error', `Compilation failed: ${err.message}`);
           return `Compilation failed: ${err.message}`;
         },
       }
@@ -121,12 +142,15 @@ pragma solidity ^0.8.19;`);
 
   const deployTheContract = async () => {
     if (!walletClient || !isConnected) {
+      addLog('error', 'Please connect your wallet first');
       toast.error("Please connect your wallet first");
       return;
     }
 
     try {
       setDeployed(1);
+      addLog('info', 'Starting deployment...');
+      
       toast.promise(
         (async () => {
           const hash = await walletClient.deployContract({
@@ -139,6 +163,8 @@ pragma solidity ^0.8.19;`);
           if (!hash) {
             throw new Error('Deployment failed - no transaction hash received');
           }
+          
+          addLog('info', `Transaction hash: ${hash}`);
 
           const receipt = await publicClient.waitForTransactionReceipt({ hash });
           if (!receipt?.contractAddress) {
@@ -147,6 +173,7 @@ pragma solidity ^0.8.19;`);
           
           setReceipt(receipt);
           setDeployed(2);
+          addLog('success', `Contract deployed at ${receipt.contractAddress}`);
           return receipt;
         })(),
         {
@@ -156,17 +183,21 @@ pragma solidity ^0.8.19;`);
             : 'Contract deployed successfully',
           error: (err) => {
             setDeployed(0);
-            return typeof err === 'string' 
+            const errorMessage = typeof err === 'string' 
               ? err 
               : err instanceof Error 
                 ? err.message 
                 : 'Deployment failed';
+            addLog('error', `Deployment failed: ${errorMessage}`);
+            return errorMessage;
           }
         }
       );
     } catch (error) {
       console.error('Deployment error:', error);
-      toast.error('Error deploying contract: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      addLog('error', `Deployment error: ${errorMessage}`);
+      toast.error('Error deploying contract: ' + errorMessage);
       setDeployed(0);
     }
   };
@@ -191,14 +222,14 @@ pragma solidity ^0.8.19;`);
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A]"> {/* Darker background */}
+    <div className="min-h-screen bg-[#0A0A0A]">
       <Navbar />
       <Sidebar selection={selection} setSelection={setSelection} />
 
       <div className="flex h-[100vh] pl-14 pt-[3.5rem]">
         {showPanels ? (
           <ResizablePanelGroup direction="horizontal" className="w-full rounded-lg">
-            <ResizablePanel defaultSize={20} className="bg-[#111111]"> {/* Darker panel background */}
+            <ResizablePanel defaultSize={20} className="bg-[#111111]">
               <div className="flex flex-col h-full">
                 <div className="p-4 border-b border-[#2A2A2A]"> {/* Darker border */}
                   <h2 className="text-lg font-semibold text-gray-200">
@@ -310,11 +341,25 @@ pragma solidity ^0.8.19;`);
             
             <ResizableHandle className="bg-[#2A2A2A]" withHandle />
             
-            <ResizablePanel defaultSize={80} className="bg-[#0A0A0A]">
-              <CodeEditor
-                code={code}
-                onChange={(value) => setCode(value || "")}
-              />
+            <ResizablePanel defaultSize={80}>
+              <ResizablePanelGroup direction="vertical">
+                <ResizablePanel defaultSize={70}>
+                  <CodeEditor
+                    code={code}
+                    onChange={(value) => setCode(value || "")}
+                  />
+                </ResizablePanel>
+                
+                <ResizableHandle className="bg-[#2A2A2A]" withHandle />
+                
+                <ResizablePanel defaultSize={30}>
+                  <ConsolePanel 
+                    logs={logs} 
+                    onClear={clearLogs}
+                    className="h-full" // Add this to ensure full height
+                  />
+                </ResizablePanel>
+              </ResizablePanelGroup>
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (
