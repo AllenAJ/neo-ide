@@ -4,6 +4,7 @@ export enum UserSelection {
   Compile,
   Deploy,
   Settings,
+  Analysis  // Add this new option
 }
 export interface LogMessage {
   type: 'error' | 'success' | 'info';
@@ -15,4 +16,4 @@ export interface ConsolePanelProps {
   logs: LogMessage[];
   onClear: () => void;
 }
-export type AssistantType = "Mantle" | "Solidity";
+export type AssistantType = "Neo" | "Solidity";

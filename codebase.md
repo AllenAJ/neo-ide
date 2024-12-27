@@ -228,6 +228,93 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/deploym
 
 ```
 
+# src/app/api/analyze/route.ts
+
+```ts
+// src/app/api/analyze/route.ts
+import { NextResponse } from 'next/server';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || ''
+});
+
+export async function POST(req: Request) {
+  try {
+    const { code } = await req.json();
+    
+    if (!code) {
+      return NextResponse.json(
+        { error: 'No code provided' },
+        { status: 400 }
+      );
+    }
+
+    const prompt = `Analyze this Solidity smart contract and provide feedback in the following categories:
+    1. Security vulnerabilities
+    2. Optimization opportunities
+    3. Gas efficiency
+    4. Code quality
+
+    Contract code:
+    ${code}
+
+    Provide the analysis in this exact JSON format:
+    {
+      "security": [
+        {
+          "severity": "High|Medium|Low",
+          "title": "Issue name",
+          "description": "Detailed description",
+          "recommendation": "How to fix"
+        }
+      ],
+      "optimization": [
+        {
+          "title": "Optimization title",
+          "description": "What can be optimized",
+          "recommendation": "How to optimize"
+        }
+      ],
+      "gasEfficiency": [
+        {
+          "title": "Efficiency issue",
+          "description": "What can be improved",
+          "recommendation": "How to improve",
+          "estimatedSaving": "Estimated gas savings"
+        }
+      ],
+      "codeQuality": [
+        {
+          "title": "Quality issue",
+          "description": "What can be improved",
+          "recommendation": "How to improve"
+        }
+      ]
+    }`;
+
+    const completion = await openai.chat.completions.create({
+      messages: [
+        { role: "system", content: "You are an expert Solidity smart contract auditor." },
+        { role: "user", content: prompt }
+      ],
+      model: "gpt-3.5-turbo",
+      response_format: { type: "json_object" }
+    });
+
+    const analysis = JSON.parse(completion.choices[0]?.message?.content || "{}");
+    
+    return NextResponse.json(analysis);
+  } catch (error) {
+    console.error('Analysis error:', error);
+    return NextResponse.json(
+      { error: 'Analysis failed' },
+      { status: 500 }
+    );
+  }
+}
+```
+
 # src/app/api/route.ts
 
 ```ts
@@ -562,6 +649,7 @@ import LoadingState from "@/components/LoadingState";
 import AIAssistantPanel from "@/components/AIAssistantPanel";
 import Navbar from "@/components/Navbar";
 import Sidebar from "@/components/Sidebar";
+import ContractTemplates from '@/components/ContractTemplates';
 import { Message, useAssistant } from "ai/react";
 import {
   http,
@@ -582,6 +670,7 @@ import { useEffect, useState } from "react";
 import { Wand2, Code2, Rocket, Settings2, LoaderIcon } from "lucide-react";
 import { LogMessage } from './types/types';
 import ConsolePanel from '@/components/ConsolePanel';
+import AnalysisPanel from '@/components/AnalysisPanel';
 
 export default function Home() {
   const [code, setCode] = useState(`//SPDX-License-Identfier: MIT
@@ -600,7 +689,7 @@ pragma solidity ^0.8.19;`);
 
   const publicClient = createPublicClient({
     chain: mantleSepoliaTestnet,
-    transport: http("https://rpc.testnet.mantle.xyz"),
+    transport: http("https://rpc.sepolia.mantle.xyz"),
   });
 
   const {
@@ -781,21 +870,22 @@ pragma solidity ^0.8.19;`);
     <div className="min-h-screen bg-[#0A0A0A]">
       <Navbar />
       <Sidebar selection={selection} setSelection={setSelection} />
-
+  
       <div className="flex h-[100vh] pl-14 pt-[3.5rem]">
         {showPanels ? (
           <ResizablePanelGroup direction="horizontal" className="w-full rounded-lg">
             <ResizablePanel defaultSize={20} className="bg-[#111111]">
               <div className="flex flex-col h-full">
-                <div className="p-4 border-b border-[#2A2A2A]"> {/* Darker border */}
+                <div className="p-4 border-b border-[#2A2A2A]">
                   <h2 className="text-lg font-semibold text-gray-200">
                     {selection === UserSelection.AI && "AI Assistant"}
                     {selection === UserSelection.Compile && "Compile Contract"}
                     {selection === UserSelection.Deploy && "Deploy Contract"}
                     {selection === UserSelection.Settings && "Settings"}
+                    {selection === UserSelection.Analysis && "Contract Analysis"}
                   </h2>
                 </div>
-
+  
                 <div className="p-6 flex-1 overflow-y-auto">
                   {selection === UserSelection.AI && (
                     <div className="space-y-6">
@@ -821,7 +911,7 @@ pragma solidity ^0.8.19;`);
                           Solidity
                         </button>
                       </div>
-
+  
                       <AIAssistantPanel
                         input={morphOrSolidity === "Mantle" ? morphDoubtInput : solidityDoubtInput}
                         onInputChange={morphOrSolidity === "Mantle" ? morphHandleDoubtInputChange : solidityHandleDoubtInputChange}
@@ -836,7 +926,7 @@ pragma solidity ^0.8.19;`);
                       />
                     </div>
                   )}
-
+  
                   {selection === UserSelection.Compile && (
                     <div className="flex flex-col gap-4 items-center">
                       <button
@@ -857,7 +947,7 @@ pragma solidity ^0.8.19;`);
                       />
                     </div>
                   )}
-
+  
                   {selection === UserSelection.Deploy && (
                     <div className="flex flex-col gap-4 items-center">
                       <button
@@ -891,12 +981,30 @@ pragma solidity ^0.8.19;`);
                       )}
                     </div>
                   )}
+  
+                  {selection === UserSelection.Analysis && (
+                    <div className="text-gray-300">
+                      <div className="space-y-4">
+                        <p className="text-[#00ff98] font-medium">AI Analysis Active</p>
+                        <p>Your contract is being analyzed for:</p>
+                        <ul className="list-disc pl-6 space-y-2">
+                          <li>Security vulnerabilities</li>
+                          <li>Gas optimization opportunities</li>
+                          <li>Code quality improvements</li>
+                          <li>Best practices compliance</li>
+                        </ul>
+                        <p className="text-sm text-gray-400 mt-4">
+                          View detailed analysis results in the bottom panel below the code editor.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </ResizablePanel>
-            
+  
             <ResizableHandle className="bg-[#2A2A2A]" withHandle />
-            
+  
             <ResizablePanel defaultSize={80}>
               <ResizablePanelGroup direction="vertical">
                 <ResizablePanel defaultSize={70}>
@@ -905,59 +1013,84 @@ pragma solidity ^0.8.19;`);
                     onChange={(value) => setCode(value || "")}
                   />
                 </ResizablePanel>
-                
+  
                 <ResizableHandle className="bg-[#2A2A2A]" withHandle />
-                
+  
                 <ResizablePanel defaultSize={30}>
-                  <ConsolePanel 
-                    logs={logs} 
-                    onClear={clearLogs}
-                    className="h-full" // Add this to ensure full height
-                  />
+                  <ResizablePanelGroup direction="horizontal">
+                    <ResizablePanel defaultSize={50}>
+                      <ConsolePanel 
+                        logs={logs} 
+                        onClear={clearLogs}
+                        className="h-full"
+                      />
+                    </ResizablePanel>
+  
+                    <ResizableHandle className="bg-[#2A2A2A]" withHandle />
+  
+                    <ResizablePanel defaultSize={50}>
+                      <AnalysisPanel code={code} className="h-full" />
+                    </ResizablePanel>
+                  </ResizablePanelGroup>
                 </ResizablePanel>
               </ResizablePanelGroup>
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (
-          <div className="w-full flex flex-col items-center justify-center gap-8 px-4">
-            <div className="max-w-md w-full space-y-8">
-              <div className="text-center space-y-4">
-                <h1 className="text-4xl font-bold text-[#00ff98]">Welcome to Mantle IDE</h1>
-                <p className="text-gray-400">Create, compile, and deploy smart contracts with AI assistance</p>
+          <div className="w-full flex flex-col items-center justify-center">
+            <div className="w-full max-w-3xl px-6">
+              <div className="text-center mb-12">
+                <h1 className="text-4xl font-bold text-[#00ff98] mb-2">
+                  Welcome to Mantle IDE
+                </h1>
+                <p className="text-gray-400">
+                  Create, compile, and deploy smart contracts with AI assistance
+                </p>
               </div>
-              
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                generateContract();
-              }} className="space-y-4">
-                <div className="flex gap-2">
-                  <input
-                    value={codegenInput}
-                    onChange={handleCodegenInputChange}
-                    className="flex-1 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-4 py-3 text-gray-200 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#00ff98]"
-                    placeholder="Describe your smart contract..."
-                  />
-                  <button
-                    type="submit"
-                    className="bg-[#1A1A1A] text-[#00ff98] border border-[#00ff98] px-6 py-3 rounded-lg hover:bg-[#2A2A2A] transition-colors"
-                  >
-                    Generate
-                  </button>
-                </div>
-              </form>
-              
-              <div className="flex items-center justify-center gap-4">
-                <div className="h-px flex-1 bg-[#2A2A2A]"></div>
+  
+              <div className="mb-8">
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  generateContract();
+                }}>
+                  <div className="flex gap-2">
+                    <input
+                      value={codegenInput}
+                      onChange={handleCodegenInputChange}
+                      className="flex-1 bg-[#1e2124] border border-gray-700 rounded-lg px-4 py-3 text-gray-200 placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-[#00ff98]"
+                      placeholder="Describe your smart contract..."
+                    />
+                    <button
+                      type="submit"
+                      className="px-6 py-3 bg-transparent text-[#00ff98] border border-[#00ff98] rounded-lg hover:bg-[#00ff98] hover:text-black transition-colors font-medium"
+                    >
+                      Generate
+                    </button>
+                  </div>
+                </form>
+              </div>
+  
+              <div className="flex items-center gap-4 mb-8">
+                <div className="h-px flex-1 bg-gray-800"></div>
                 <span className="text-gray-500">or</span>
-                <div className="h-px flex-1 bg-[#2A2A2A]"></div>
+                <div className="h-px flex-1 bg-gray-800"></div>
               </div>
-              
-              <button
-                onClick={manualStart}
-                className="w-full bg-[#1A1A1A] text-gray-300 px-6 py-3 rounded-lg hover:bg-[#2A2A2A] transition-colors border border-[#2A2A2A]"
-              >
-                Start Manually
-              </button>
+  
+              <ContractTemplates 
+                onSelectTemplate={(templateCode: string) => {
+                  setCode(templateCode);
+                  setShowPanels(true);
+                }} 
+              />
+  
+              <div className="mt-8">
+                <button
+                  onClick={manualStart}
+                  className="w-full bg-[#1e2124] text-gray-300 px-6 py-3 rounded-lg hover:bg-[#2a2d31] transition-colors"
+                >
+                  Start from Scratch
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1101,6 +1234,7 @@ export enum UserSelection {
   Compile,
   Deploy,
   Settings,
+  Analysis  // Add this new option
 }
 export interface LogMessage {
   type: 'error' | 'success' | 'info';
@@ -1131,6 +1265,13 @@ interface AIAssistantPanelProps {
     isGenerating: boolean;
     mode: 'generate' | 'ask';
     assistantType: "Mantle" | "Solidity";
+}
+
+interface AnalysisPanelProps {
+  code: string;
+  className?: string;
+  onAnalyze: () => void;
+  isAnalyzing: boolean;
 }
 
 const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
@@ -1204,6 +1345,206 @@ const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 };
 
 export default AIAssistantPanel;
+```
+
+# src/components/AnalysisPanel.tsx
+
+```tsx
+// src/components/AnalysisPanel.tsx
+import { useState } from 'react';
+import { AlertTriangle, Zap, Code2, Check, Loader2 } from 'lucide-react';
+
+interface AIAnalysisPanelProps {
+  code: string;
+  className?: string;
+}
+
+export default function AIAnalysisPanel({ code, className = '' }: AIAnalysisPanelProps) {
+  const [activeTab, setActiveTab] = useState<'security' | 'optimization' | 'gas' | 'quality'>('security');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const analyzeContract = async () => {
+    if (!code.trim()) {
+      setError("Please enter some code to analyze");
+      return;
+    }
+
+    try {
+      setIsAnalyzing(true);
+      setError(null);
+      
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+
+      if (!response.ok) {
+        throw new Error('Analysis failed');
+      }
+
+      const result = await response.json();
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      
+      setAnalysis(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Analysis failed');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const getIssueColor = (severity: string) => {
+    switch (severity) {
+      case 'High':
+        return 'text-red-500';
+      case 'Medium':
+        return 'text-yellow-500';
+      case 'Low':
+        return 'text-blue-500';
+      default:
+        return 'text-gray-500';
+    }
+  };
+
+  return (
+    <div className={`bg-[#1E1E1E] text-white flex flex-col h-full ${className}`}>
+      <div className="flex justify-center p-4 border-b border-[#2A2A2A]">
+        <button
+          onClick={analyzeContract}
+          disabled={isAnalyzing}
+          className="flex items-center gap-2 bg-[#1A1A1A] text-[#00ff98] border border-[#00ff98] px-6 py-3 rounded-lg hover:bg-[#2A2A2A] transition-colors disabled:opacity-50"
+        >
+          {isAnalyzing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Analyzing...
+            </>
+          ) : (
+            <>
+              <Code2 className="w-4 h-4" />
+              Analyze Contract
+            </>
+          )}
+        </button>
+      </div>
+
+      {error && (
+        <div className="p-4 text-red-400 text-center">
+          {error}
+        </div>
+      )}
+
+      {!analysis && !error && !isAnalyzing && (
+        <div className="flex-1 flex items-center justify-center text-gray-400 p-4 text-center">
+          Click the button above to analyze your contract
+        </div>
+      )}
+
+      {analysis && (
+        <>
+          <div className="flex border-b border-[#2A2A2A]">
+            <button
+              onClick={() => setActiveTab('security')}
+              className={`flex items-center gap-2 px-4 py-2 ${
+                activeTab === 'security' ? 'bg-[#2A2A2A] text-[#00ff98]' : ''
+              }`}
+            >
+              <AlertTriangle size={16} />
+              Security ({analysis.security?.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveTab('optimization')}
+              className={`flex items-center gap-2 px-4 py-2 ${
+                activeTab === 'optimization' ? 'bg-[#2A2A2A] text-[#00ff98]' : ''
+              }`}
+            >
+              <Zap size={16} />
+              Optimization ({analysis.optimization?.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveTab('gas')}
+              className={`flex items-center gap-2 px-4 py-2 ${
+                activeTab === 'gas' ? 'bg-[#2A2A2A] text-[#00ff98]' : ''
+              }`}
+            >
+              <Code2 size={16} />
+              Gas ({analysis.gasEfficiency?.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveTab('quality')}
+              className={`flex items-center gap-2 px-4 py-2 ${
+                activeTab === 'quality' ? 'bg-[#2A2A2A] text-[#00ff98]' : ''
+              }`}
+            >
+              <Check size={16} />
+              Quality ({analysis.codeQuality?.length || 0})
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {activeTab === 'security' && analysis.security && (
+              <div className="space-y-4">
+                {analysis.security.map((issue: any, index: number) => (
+                  <div key={index} className="bg-[#2A2A2A] rounded-lg p-4">
+                    <div className={`font-medium ${getIssueColor(issue.severity)}`}>
+                      {issue.title} - {issue.severity} Severity
+                    </div>
+                    <div className="mt-2 text-sm text-gray-300">{issue.description}</div>
+                    <div className="mt-2 text-sm text-[#00ff98]">{issue.recommendation}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeTab === 'optimization' && analysis.optimization && (
+              <div className="space-y-4">
+                {analysis.optimization.map((opt: any, index: number) => (
+                  <div key={index} className="bg-[#2A2A2A] rounded-lg p-4">
+                    <div className="font-medium text-[#00ff98]">{opt.title}</div>
+                    <div className="mt-2 text-sm text-gray-300">{opt.description}</div>
+                    <div className="mt-2 text-sm text-blue-400">{opt.recommendation}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeTab === 'gas' && analysis.gasEfficiency && (
+              <div className="space-y-4">
+                {analysis.gasEfficiency.map((gas: any, index: number) => (
+                  <div key={index} className="bg-[#2A2A2A] rounded-lg p-4">
+                    <div className="font-medium text-[#00ff98]">{gas.title}</div>
+                    <div className="mt-2 text-sm text-gray-300">{gas.description}</div>
+                    <div className="mt-1 text-sm text-yellow-400">
+                      Estimated Savings: {gas.estimatedSaving}
+                    </div>
+                    <div className="mt-2 text-sm text-blue-400">{gas.recommendation}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeTab === 'quality' && analysis.codeQuality && (
+              <div className="space-y-4">
+                {analysis.codeQuality.map((quality: any, index: number) => (
+                  <div key={index} className="bg-[#2A2A2A] rounded-lg p-4">
+                    <div className="font-medium text-[#00ff98]">{quality.title}</div>
+                    <div className="mt-2 text-sm text-gray-300">{quality.description}</div>
+                    <div className="mt-2 text-sm text-blue-400">{quality.recommendation}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 ```
 
 # src/components/CodeEditor.tsx
@@ -1621,6 +1962,280 @@ const ConsolePanel = ({ logs, onClear, className = '' }: ConsolePanelProps) => {
 export default ConsolePanel;
 ```
 
+# src/components/ContractTemplates.tsx
+
+```tsx
+import React, { useState } from 'react';
+import { Code2, FileCode, Users, Box, Coins } from 'lucide-react';
+
+interface Template {
+  id: string;
+  category: string;
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  code: string;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  icon: React.ReactNode;
+}
+
+interface ContractTemplatesProps {
+  onSelectTemplate: (code: string) => void;
+}
+
+const ContractTemplates: React.FC<ContractTemplatesProps> = ({ onSelectTemplate }) => {
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  const templates: Template[] = [
+    {
+      id: 'erc20',
+      category: 'tokens',
+      name: 'ERC-20 Token',
+      description: 'Standard fungible token implementation',
+      icon: <Coins className="w-5 h-5" />,
+      code: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+contract SimpleToken {
+    string public name;
+    string public symbol;
+    uint8 public decimals;
+    uint256 public totalSupply;
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    constructor(string memory _name, string memory _symbol, uint8 _decimals, uint256 _totalSupply) {
+        name = _name;
+        symbol = _symbol;
+        decimals = _decimals;
+        totalSupply = _totalSupply;
+        balanceOf[msg.sender] = _totalSupply;
+    }
+
+    function transfer(address to, uint256 value) public returns (bool) {
+        require(balanceOf[msg.sender] >= value, "Insufficient balance");
+        balanceOf[msg.sender] -= value;
+        balanceOf[to] += value;
+        emit Transfer(msg.sender, to, value);
+        return true;
+    }
+
+    function approve(address spender, uint256 value) public returns (bool) {
+        allowance[msg.sender][spender] = value;
+        emit Approval(msg.sender, spender, value);
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 value) public returns (bool) {
+        require(balanceOf[from] >= value, "Insufficient balance");
+        require(allowance[from][msg.sender] >= value, "Insufficient allowance");
+        balanceOf[from] -= value;
+        balanceOf[to] += value;
+        allowance[from][msg.sender] -= value;
+        emit Transfer(from, to, value);
+        return true;
+    }
+}`
+    },
+    {
+      id: 'nft',
+      category: 'tokens',
+      name: 'NFT Collection',
+      description: 'Basic NFT collection with minting functionality',
+      icon: <Box className="w-5 h-5" />,
+      code: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+contract SimpleNFT {
+    string public name;
+    string public symbol;
+    uint256 private _tokenIds;
+    mapping(uint256 => address) private _owners;
+    mapping(address => uint256) private _balances;
+    
+    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
+    
+    constructor(string memory _name, string memory _symbol) {
+        name = _name;
+        symbol = _symbol;
+    }
+    
+    function mint() public returns (uint256) {
+        _tokenIds++;
+        uint256 newTokenId = _tokenIds;
+        _owners[newTokenId] = msg.sender;
+        _balances[msg.sender]++;
+        emit Transfer(address(0), msg.sender, newTokenId);
+        return newTokenId;
+    }
+    
+    function ownerOf(uint256 tokenId) public view returns (address) {
+        address owner = _owners[tokenId];
+        require(owner != address(0), "Token doesn't exist");
+        return owner;
+    }
+    
+    function balanceOf(address owner) public view returns (uint256) {
+        return _balances[owner];
+    }
+}`
+    },
+    {
+      id: 'multisig',
+      category: 'security',
+      name: 'Multi-Signature Wallet',
+      description: 'Wallet requiring multiple signatures for transactions',
+      icon: <Users className="w-5 h-5" />,
+      code: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+contract MultiSigWallet {
+    address[] public owners;
+    uint public required;
+    uint public transactionCount;
+    
+    struct Transaction {
+        address to;
+        uint value;
+        bytes data;
+        bool executed;
+    }
+    
+    mapping(uint => Transaction) public transactions;
+    mapping(uint => mapping(address => bool)) public confirmations;
+    
+    event Submission(uint indexed transactionId);
+    event Confirmation(address indexed sender, uint indexed transactionId);
+    event Execution(uint indexed transactionId);
+    
+    constructor(address[] memory _owners, uint _required) {
+        require(_owners.length > 0, "Owners required");
+        require(_required > 0 && _required <= _owners.length, "Invalid required number");
+        owners = _owners;
+        required = _required;
+    }
+    
+    function submitTransaction(address _to, uint _value, bytes memory _data) public returns (uint) {
+        uint transactionId = transactionCount;
+        transactions[transactionId] = Transaction({
+            to: _to,
+            value: _value,
+            data: _data,
+            executed: false
+        });
+        transactionCount += 1;
+        emit Submission(transactionId);
+        return transactionId;
+    }
+    
+    function confirmTransaction(uint transactionId) public {
+        require(isOwner(msg.sender), "Not owner");
+        require(!confirmations[transactionId][msg.sender], "Already confirmed");
+        confirmations[transactionId][msg.sender] = true;
+        emit Confirmation(msg.sender, transactionId);
+        executeTransaction(transactionId);
+    }
+    
+    function executeTransaction(uint transactionId) public {
+        require(!transactions[transactionId].executed, "Already executed");
+        if (isConfirmed(transactionId)) {
+            Transaction storage transaction = transactions[transactionId];
+            transaction.executed = true;
+            (bool success,) = transaction.to.call{value: transaction.value}(transaction.data);
+            require(success, "Execution failed");
+            emit Execution(transactionId);
+        }
+    }
+    
+    function isOwner(address addr) private view returns (bool) {
+        for (uint i = 0; i < owners.length; i++) {
+            if (owners[i] == addr) return true;
+        }
+        return false;
+    }
+    
+    function isConfirmed(uint transactionId) public view returns (bool) {
+        uint count = 0;
+        for (uint i = 0; i < owners.length; i++) {
+            if (confirmations[transactionId][owners[i]]) count += 1;
+            if (count == required) return true;
+        }
+        return false;
+    }
+}`
+    }
+  ];
+
+  const categories: Category[] = [
+    { id: 'all', name: 'All Templates', icon: <FileCode className="w-4 h-4" /> },
+    { id: 'tokens', name: 'Tokens', icon: <Coins className="w-4 h-4" /> },
+    { id: 'security', name: 'Security', icon: <Users className="w-4 h-4" /> }
+  ];
+
+  const filteredTemplates = selectedCategory === 'all' 
+    ? templates 
+    : templates.filter(t => t.category === selectedCategory);
+
+  return (
+    <div className="w-full">
+      <h2 className="text-xl font-semibold text-white mb-4">Contract Templates</h2>
+      
+      {/* Category Pills */}
+      <div className="flex gap-2 mb-6">
+        {categories.map(category => (
+          <button
+            key={category.id}
+            onClick={() => setSelectedCategory(category.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm ${
+              selectedCategory === category.id
+                ? 'bg-[#00ff98] text-black'
+                : 'bg-[#1e2124] text-gray-300 hover:bg-[#2a2d31]'
+            }`}
+          >
+            {category.icon}
+            {category.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Template Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredTemplates.map(template => (
+          <div 
+            key={template.id} 
+            className="bg-[#1e2124] rounded-lg p-6 flex flex-col"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="text-[#00ff98]">{template.icon}</div>
+              <div>
+                <h3 className="text-white font-medium">{template.name}</h3>
+                <p className="text-sm text-gray-400">{template.description}</p>
+              </div>
+            </div>
+            
+            <button
+              onClick={() => onSelectTemplate(template.code)}
+              className="mt-auto w-full px-4 py-2 bg-transparent text-[#00ff98] border border-[#00ff98] rounded-lg hover:bg-[#00ff98] hover:text-black transition-colors text-sm font-medium"
+            >
+              Use Template
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default ContractTemplates;
+```
+
 # src/components/Loader.tsx
 
 ```tsx
@@ -1768,6 +2383,8 @@ export default function Navbar() {
 import { UserSelection } from "@/app/types/types";
 import Image from "next/image";
 import Link from "next/link";
+import { Code2 } from "lucide-react";
+
 import {
   FaGear,
   FaHammer,
@@ -1826,7 +2443,19 @@ export default function Sidebar({
             </button>
           </li>
         </ul>
-
+        <li>
+  <button onClick={() => setSelection(UserSelection.Analysis)}>
+    <div
+      title="Analysis"
+      data-toggle="tooltip"
+      className={`hover:cursor-pointer h-11 w-11 p-2 rounded-lg text-white ${
+        selection == UserSelection.Analysis && "bg-gray-900 hover:bg-gray-900"
+      } hover:bg-gray-700`}
+    >
+      <Code2 className="w-full h-full" />
+    </div>
+  </button>
+</li>
         <div>
         <button onClick={() => setSelection(UserSelection.Settings)}>
             {" "}
@@ -2031,6 +2660,352 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+```
+
+# src/services/aiContractAnalyzer.ts
+
+```ts
+// src/services/aiContractAnalyzer.ts
+import OpenAI from 'openai';
+
+export interface AIAnalysisResult {
+  security: SecurityIssue[];
+  optimization: OptimizationSuggestion[];
+  gasEfficiency: GasEfficiencySuggestion[];
+  codeQuality: CodeQualityIssue[];
+}
+
+interface SecurityIssue {
+  severity: 'High' | 'Medium' | 'Low';
+  title: string;
+  description: string;
+  line?: number;
+  recommendation: string;
+}
+
+interface OptimizationSuggestion {
+  title: string;
+  description: string;
+  line?: number;
+  recommendation: string;
+}
+
+interface GasEfficiencySuggestion {
+  title: string;
+  description: string;
+  line?: number;
+  recommendation: string;
+  estimatedSaving: string;
+}
+
+interface CodeQualityIssue {
+  title: string;
+  description: string;
+  line?: number;
+  recommendation: string;
+}
+
+export class AIContractAnalyzer {
+  private openai: OpenAI;
+
+  constructor() {
+    this.openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY || '',
+    });
+  }
+
+  async analyzeContract(code: string): Promise<AIAnalysisResult> {
+    try {
+      const prompt = `Analyze the following Solidity smart contract for security vulnerabilities, optimization opportunities, gas efficiency improvements, and code quality issues. Provide specific, actionable feedback in a structured format.
+
+Contract:
+${code}
+
+Provide your analysis as a JSON object with the following structure exactly - no additional text, just the JSON:
+{
+  "security": [
+    {
+      "severity": "High|Medium|Low",
+      "title": "Issue title",
+      "description": "Detailed description",
+      "line": null,
+      "recommendation": "How to fix"
+    }
+  ],
+  "optimization": [
+    {
+      "title": "Optimization title",
+      "description": "What can be optimized",
+      "line": null,
+      "recommendation": "How to optimize"
+    }
+  ],
+  "gasEfficiency": [
+    {
+      "title": "Efficiency issue",
+      "description": "What can be improved",
+      "line": null,
+      "recommendation": "How to improve",
+      "estimatedSaving": "Estimated gas savings"
+    }
+  ],
+  "codeQuality": [
+    {
+      "title": "Quality issue",
+      "description": "What can be improved",
+      "line": null,
+      "recommendation": "How to improve"
+    }
+  ]
+}`;
+
+      const response = await this.openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert Solidity smart contract auditor. Your responses must be valid JSON only, with no additional text or markdown formatting."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.3
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('No analysis content received');
+      }
+
+      const cleanContent = content.trim().replace(/^\`\`\`json\s*|\s*\`\`\`$/g, '');
+      
+      const analysis = JSON.parse(cleanContent) as AIAnalysisResult;
+      
+      if (!this.isValidAnalysis(analysis)) {
+        throw new Error('Invalid analysis format received');
+      }
+
+      return analysis;
+
+    } catch (error) {
+      console.error('AI analysis error:', error);
+      return {
+        security: [],
+        optimization: [],
+        gasEfficiency: [],
+        codeQuality: []
+      };
+    }
+  }
+
+  private isValidAnalysis(analysis: any): analysis is AIAnalysisResult {
+    return (
+      analysis &&
+      Array.isArray(analysis.security) &&
+      Array.isArray(analysis.optimization) &&
+      Array.isArray(analysis.gasEfficiency) &&
+      Array.isArray(analysis.codeQuality)
+    );
+  }
+}
+```
+
+# src/services/contractAnalyzer.ts
+
+```ts
+// src/services/contractAnalyzer.ts
+
+interface AnalysisResult {
+    security: SecurityIssue[];
+    optimization: OptimizationSuggestion[];
+    gasEfficiency: GasEfficiencySuggestion[];
+    codeQuality: CodeQualityIssue[];
+  }
+  
+  interface SecurityIssue {
+    severity: 'High' | 'Medium' | 'Low';
+    type: string;
+    description: string;
+    line: number;
+    recommendation: string;
+  }
+  
+  interface OptimizationSuggestion {
+    type: string;
+    description: string;
+    line: number;
+    suggestion: string;
+  }
+  
+  interface GasEfficiencySuggestion {
+    type: string;
+    description: string;
+    line: number;
+    potentialSaving: string;
+    recommendation: string;
+  }
+  
+  interface CodeQualityIssue {
+    type: string;
+    description: string;
+    line: number;
+    recommendation: string;
+  }
+  
+  export class ContractAnalyzer {
+    private static securityPatterns = [
+      {
+        pattern: /(\s|^)transfer\s*\(/,
+        type: 'Reentrancy',
+        severity: 'High',
+        description: 'Potential reentrancy vulnerability detected',
+        recommendation: 'Consider using ReentrancyGuard or checks-effects-interactions pattern'
+      },
+      {
+        pattern: /tx\.origin/,
+        type: 'Authentication',
+        severity: 'High',
+        description: 'Usage of tx.origin for authentication',
+        recommendation: 'Use msg.sender instead of tx.origin for authentication'
+      },
+      {
+        pattern: /assembly\s*{/,
+        type: 'Inline Assembly',
+        severity: 'Medium',
+        description: 'Usage of inline assembly',
+        recommendation: 'Ensure inline assembly is necessary and well-audited'
+      },
+      {
+        pattern: /selfdestruct|suicide/,
+        type: 'Destructible',
+        severity: 'High',
+        description: 'Contract can be destroyed',
+        recommendation: 'Ensure selfdestruct is properly protected'
+      }
+    ];
+  
+    private static optimizationPatterns = [
+      {
+        pattern: /uint\s+i\s*=/,
+        type: 'Loop Optimization',
+        description: 'Loop counter could be unchecked',
+        suggestion: 'Use unchecked blocks for loop counters to save gas'
+      },
+      {
+        pattern: /string\s+public/,
+        type: 'Storage Optimization',
+        description: 'Public string uses more storage',
+        suggestion: 'Consider using bytes32 for fixed-length strings'
+      }
+    ];
+  
+    private static gasPatterns = [
+      {
+        pattern: /\+\+i/,
+        type: 'Increment Operation',
+        description: 'Pre-increment more efficient than post-increment',
+        potentialSaving: '~5 gas per operation',
+        recommendation: 'Use ++i instead of i++'
+      },
+      {
+        pattern: /require\(.*,\s*".*"\)/,
+        type: 'Error Message',
+        description: 'Long error messages increase deployment cost',
+        potentialSaving: 'Variable based on message length',
+        recommendation: 'Use custom error instead of error message'
+      }
+    ];
+  
+    public static analyze(code: string): AnalysisResult {
+      const lines = code.split('\n');
+      const analysis: AnalysisResult = {
+        security: [],
+        optimization: [],
+        gasEfficiency: [],
+        codeQuality: []
+      };
+  
+      lines.forEach((line, index) => {
+        // Security Analysis
+        this.securityPatterns.forEach(pattern => {
+          if (pattern.pattern.test(line)) {
+            analysis.security.push({
+              severity: pattern.severity as 'High' | 'Medium' | 'Low',
+              type: pattern.type,
+              description: pattern.description,
+              line: index + 1,
+              recommendation: pattern.recommendation
+            });
+          }
+        });
+  
+        // Optimization Analysis
+        this.optimizationPatterns.forEach(pattern => {
+          if (pattern.pattern.test(line)) {
+            analysis.optimization.push({
+              type: pattern.type,
+              description: pattern.description,
+              line: index + 1,
+              suggestion: pattern.suggestion
+            });
+          }
+        });
+  
+        // Gas Efficiency Analysis
+        this.gasPatterns.forEach(pattern => {
+          if (pattern.pattern.test(line)) {
+            analysis.gasEfficiency.push({
+              type: pattern.type,
+              description: pattern.description,
+              line: index + 1,
+              potentialSaving: pattern.potentialSaving,
+              recommendation: pattern.recommendation
+            });
+          }
+        });
+      });
+  
+      // Code Quality Analysis
+      analysis.codeQuality = this.analyzeCodeQuality(code);
+  
+      return analysis;
+    }
+  
+    private static analyzeCodeQuality(code: string): CodeQualityIssue[] {
+      const issues: CodeQualityIssue[] = [];
+      const lines = code.split('\n');
+  
+      // Function length check
+      let functionLines = 0;
+      let functionStartLine = 0;
+      let inFunction = false;
+  
+      lines.forEach((line, index) => {
+        if (line.includes('function')) {
+          inFunction = true;
+          functionStartLine = index + 1;
+          functionLines = 0;
+        } else if (inFunction) {
+          functionLines++;
+          if (line.includes('}')) {
+            if (functionLines > 50) {
+              issues.push({
+                type: 'Function Length',
+                description: 'Function is too long',
+                line: functionStartLine,
+                recommendation: 'Consider breaking down into smaller functions'
+              });
+            }
+            inFunction = false;
+          }
+        }
+      });
+  
+      return issues;
+    }
+  }
 ```
 
 # src/sol/compiler.ts

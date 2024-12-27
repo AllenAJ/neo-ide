@@ -1,6 +1,8 @@
 import { UserSelection } from "@/app/types/types";
 import Image from "next/image";
 import Link from "next/link";
+import { Code2 } from "lucide-react";
+
 import {
   FaGear,
   FaHammer,
@@ -59,7 +61,19 @@ export default function Sidebar({
             </button>
           </li>
         </ul>
-
+        <li>
+  <button onClick={() => setSelection(UserSelection.Analysis)}>
+    <div
+      title="Analysis"
+      data-toggle="tooltip"
+      className={`hover:cursor-pointer h-11 w-11 p-2 rounded-lg text-white ${
+        selection == UserSelection.Analysis && "bg-gray-900 hover:bg-gray-900"
+      } hover:bg-gray-700`}
+    >
+      <Code2 className="w-full h-full" />
+    </div>
+  </button>
+</li>
         <div>
         <button onClick={() => setSelection(UserSelection.Settings)}>
             {" "}

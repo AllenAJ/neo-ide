@@ -20,6 +20,7 @@ import {
 } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
+import { neoTestnet } from "@/config/chains";
 
 
 const { wallets } = getDefaultWallets();
@@ -34,9 +35,7 @@ export const config = getDefaultConfig({
       wallets: [argentWallet, trustWallet, ledgerWallet],
     },
   ],
-  chains: [
-    mantleSepoliaTestnet, sepolia, foundry
-  ],
+  chains: [neoTestnet],
   ssr: true,
 });
 

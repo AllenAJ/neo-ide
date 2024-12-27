@@ -10,7 +10,14 @@ interface AIAssistantPanelProps {
     messages: Message[];
     isGenerating: boolean;
     mode: 'generate' | 'ask';
-    assistantType: "Mantle" | "Solidity";
+    assistantType: "Neo" | "Solidity";
+}
+
+interface AnalysisPanelProps {
+  code: string;
+  className?: string;
+  onAnalyze: () => void;
+  isAnalyzing: boolean;
 }
 
 const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({

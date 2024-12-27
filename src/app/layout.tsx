@@ -7,8 +7,8 @@ import { Toaster } from 'sonner';
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "MantleIDE",
-  description: "AI powered IDE for deploying contracts to Mantle Testnet",
+  title: "NeoIDE",
+  description: "AI powered IDE for deploying contracts to Neo Testnet",
 };
 
 

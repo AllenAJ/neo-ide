@@ -6,6 +6,7 @@ import LoadingState from "@/components/LoadingState";
 import AIAssistantPanel from "@/components/AIAssistantPanel";
 import Navbar from "@/components/Navbar";
 import Sidebar from "@/components/Sidebar";
+import ContractTemplates from '@/components/ContractTemplates';
 import { Message, useAssistant } from "ai/react";
 import {
   http,
@@ -13,7 +14,7 @@ import {
   createPublicClient,
 } from "viem";
 import { toast } from 'sonner';
-import { mantleSepoliaTestnet } from "viem/chains";
+import { neoTestnet } from "@/config/chains";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -26,6 +27,7 @@ import { useEffect, useState } from "react";
 import { Wand2, Code2, Rocket, Settings2, LoaderIcon } from "lucide-react";
 import { LogMessage } from './types/types';
 import ConsolePanel from '@/components/ConsolePanel';
+import AnalysisPanel from '@/components/AnalysisPanel';
 
 export default function Home() {
   const [code, setCode] = useState(`//SPDX-License-Identfier: MIT
@@ -35,7 +37,7 @@ pragma solidity ^0.8.19;`);
   const [compiled, setCompiled] = useState(0);
   const [byteCode, setByteCode] = useState("");
   const [abi, setAbi] = useState("");
-  const [morphOrSolidity, setMorphOrSolidity] = useState<AssistantType>("Mantle");
+  const [morphOrSolidity, setMorphOrSolidity] = useState<AssistantType>("Neo");
   const [deployed, setDeployed] = useState(0);
   const [receipt, setReceipt] = useState<TransactionReceipt | undefined>(undefined);
   const { address, isConnected } = useAccount();
@@ -43,8 +45,8 @@ pragma solidity ^0.8.19;`);
   const [logs, setLogs] = useState<LogMessage[]>([]);
 
   const publicClient = createPublicClient({
-    chain: mantleSepoliaTestnet,
-    transport: http("https://rpc.sepolia.mantle.xyz"),
+    chain: neoTestnet,
+    transport: http("https://neoxt4seed1.ngd.network"),
   });
 
   const {
@@ -146,10 +148,10 @@ pragma solidity ^0.8.19;`);
       toast.error("Please connect your wallet first");
       return;
     }
-
+  
     try {
       setDeployed(1);
-      addLog('info', 'Starting deployment...');
+      addLog('info', 'Starting deployment on Neo Testnet...');
       
       toast.promise(
         (async () => {
@@ -158,15 +160,17 @@ pragma solidity ^0.8.19;`);
             account: address,
             args: [],
             bytecode: `0x${byteCode}`,
+            // Neo testnet gas settings
+            gas: BigInt(3000000),
           });
-
+  
           if (!hash) {
             throw new Error('Deployment failed - no transaction hash received');
           }
           
           addLog('info', `Transaction hash: ${hash}`);
-
           const receipt = await publicClient.waitForTransactionReceipt({ hash });
+          
           if (!receipt?.contractAddress) {
             throw new Error('Deployment failed - no contract address received');
           }
@@ -177,7 +181,7 @@ pragma solidity ^0.8.19;`);
           return receipt;
         })(),
         {
-          loading: 'Deploying contract...',
+          loading: 'Deploying contract to Neo Testnet...',
           success: (receipt) => receipt.contractAddress 
             ? `Contract deployed at ${receipt.contractAddress}`
             : 'Contract deployed successfully',
@@ -210,7 +214,7 @@ pragma solidity ^0.8.19;`);
   };
 
   const askDoubt = async () => {
-    if (morphOrSolidity == "Mantle") {
+    if (morphOrSolidity == "Neo") {
       morphSubmitDoubt();
     } else {
       soliditySubmitDoubt();
@@ -225,34 +229,35 @@ pragma solidity ^0.8.19;`);
     <div className="min-h-screen bg-[#0A0A0A]">
       <Navbar />
       <Sidebar selection={selection} setSelection={setSelection} />
-
+  
       <div className="flex h-[100vh] pl-14 pt-[3.5rem]">
         {showPanels ? (
           <ResizablePanelGroup direction="horizontal" className="w-full rounded-lg">
             <ResizablePanel defaultSize={20} className="bg-[#111111]">
               <div className="flex flex-col h-full">
-                <div className="p-4 border-b border-[#2A2A2A]"> {/* Darker border */}
+                <div className="p-4 border-b border-[#2A2A2A]">
                   <h2 className="text-lg font-semibold text-gray-200">
                     {selection === UserSelection.AI && "AI Assistant"}
                     {selection === UserSelection.Compile && "Compile Contract"}
                     {selection === UserSelection.Deploy && "Deploy Contract"}
                     {selection === UserSelection.Settings && "Settings"}
+                    {selection === UserSelection.Analysis && "Contract Analysis"}
                   </h2>
                 </div>
-
+  
                 <div className="p-6 flex-1 overflow-y-auto">
                   {selection === UserSelection.AI && (
                     <div className="space-y-6">
                       <div className="flex gap-2 justify-center">
                         <button
-                          onClick={() => setMorphOrSolidity("Mantle")}
+                          onClick={() => setMorphOrSolidity("Neo")}
                           className={`px-4 py-2 rounded-lg transition-all ${
-                            morphOrSolidity === "Mantle"
+                            morphOrSolidity === "Neo"
                               ? "bg-[#2A2A2A] text-[#00ff98]"
                               : "bg-[#1A1A1A] text-gray-300 hover:bg-[#2A2A2A]"
                           }`}
                         >
-                          Mantle
+                          Neo
                         </button>
                         <button
                           onClick={() => setMorphOrSolidity("Solidity")}
@@ -265,22 +270,22 @@ pragma solidity ^0.8.19;`);
                           Solidity
                         </button>
                       </div>
-
+  
                       <AIAssistantPanel
-                        input={morphOrSolidity === "Mantle" ? morphDoubtInput : solidityDoubtInput}
-                        onInputChange={morphOrSolidity === "Mantle" ? morphHandleDoubtInputChange : solidityHandleDoubtInputChange}
+                        input={morphOrSolidity === "Neo" ? morphDoubtInput : solidityDoubtInput}
+                        onInputChange={morphOrSolidity === "Neo" ? morphHandleDoubtInputChange : solidityHandleDoubtInputChange}
                         onSubmit={(e) => {
                           e.preventDefault();
                           askDoubt();
                         }}
-                        messages={morphOrSolidity === "Mantle" ? morphDoubtMessages : solidityDoubtMessages}
-                        isGenerating={morphOrSolidity === "Mantle" ? morphDoubtStatus === 'in_progress' : solidityDoubtStatus === 'in_progress'}
+                        messages={morphOrSolidity === "Neo" ? morphDoubtMessages : solidityDoubtMessages}
+                        isGenerating={morphOrSolidity === "Neo" ? morphDoubtStatus === 'in_progress' : solidityDoubtStatus === 'in_progress'}
                         mode="ask"
                         assistantType={morphOrSolidity}
                       />
                     </div>
                   )}
-
+  
                   {selection === UserSelection.Compile && (
                     <div className="flex flex-col gap-4 items-center">
                       <button
@@ -301,7 +306,7 @@ pragma solidity ^0.8.19;`);
                       />
                     </div>
                   )}
-
+  
                   {selection === UserSelection.Deploy && (
                     <div className="flex flex-col gap-4 items-center">
                       <button
@@ -327,7 +332,7 @@ pragma solidity ^0.8.19;`);
                             className="text-[#00ff98] hover:underline"
                             rel="noreferrer noopener"
                             target="_blank"
-                            href={`https://explorer.sepolia.mantle.xyz//address/${receipt.contractAddress}`}
+                            href={`https://xt4scan.ngd.network/address/${receipt.contractAddress}`}
                           >
                             here
                           </Link>
@@ -335,12 +340,30 @@ pragma solidity ^0.8.19;`);
                       )}
                     </div>
                   )}
+  
+                  {selection === UserSelection.Analysis && (
+                    <div className="text-gray-300">
+                      <div className="space-y-4">
+                        <p className="text-[#00ff98] font-medium">AI Analysis Active</p>
+                        <p>Your contract is being analyzed for:</p>
+                        <ul className="list-disc pl-6 space-y-2">
+                          <li>Security vulnerabilities</li>
+                          <li>Gas optimization opportunities</li>
+                          <li>Code quality improvements</li>
+                          <li>Best practices compliance</li>
+                        </ul>
+                        <p className="text-sm text-gray-400 mt-4">
+                          View detailed analysis results in the bottom panel below the code editor.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </ResizablePanel>
-            
+  
             <ResizableHandle className="bg-[#2A2A2A]" withHandle />
-            
+  
             <ResizablePanel defaultSize={80}>
               <ResizablePanelGroup direction="vertical">
                 <ResizablePanel defaultSize={70}>
@@ -349,59 +372,84 @@ pragma solidity ^0.8.19;`);
                     onChange={(value) => setCode(value || "")}
                   />
                 </ResizablePanel>
-                
+  
                 <ResizableHandle className="bg-[#2A2A2A]" withHandle />
-                
+  
                 <ResizablePanel defaultSize={30}>
-                  <ConsolePanel 
-                    logs={logs} 
-                    onClear={clearLogs}
-                    className="h-full" // Add this to ensure full height
-                  />
+                  <ResizablePanelGroup direction="horizontal">
+                    <ResizablePanel defaultSize={50}>
+                      <ConsolePanel 
+                        logs={logs} 
+                        onClear={clearLogs}
+                        className="h-full"
+                      />
+                    </ResizablePanel>
+  
+                    <ResizableHandle className="bg-[#2A2A2A]" withHandle />
+  
+                    <ResizablePanel defaultSize={50}>
+                      <AnalysisPanel code={code} className="h-full" />
+                    </ResizablePanel>
+                  </ResizablePanelGroup>
                 </ResizablePanel>
               </ResizablePanelGroup>
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (
-          <div className="w-full flex flex-col items-center justify-center gap-8 px-4">
-            <div className="max-w-md w-full space-y-8">
-              <div className="text-center space-y-4">
-                <h1 className="text-4xl font-bold text-[#00ff98]">Welcome to Mantle IDE</h1>
-                <p className="text-gray-400">Create, compile, and deploy smart contracts with AI assistance</p>
+          <div className="w-full flex flex-col items-center justify-center">
+            <div className="w-full max-w-3xl px-6">
+              <div className="text-center mb-12">
+                <h1 className="text-4xl font-bold text-[#00ff98] mb-2">
+                  Welcome to NeoX IDE
+                </h1>
+                <p className="text-gray-400">
+                  Create, compile, and deploy smart contracts with AI assistance
+                </p>
               </div>
-              
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                generateContract();
-              }} className="space-y-4">
-                <div className="flex gap-2">
-                  <input
-                    value={codegenInput}
-                    onChange={handleCodegenInputChange}
-                    className="flex-1 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-4 py-3 text-gray-200 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#00ff98]"
-                    placeholder="Describe your smart contract..."
-                  />
-                  <button
-                    type="submit"
-                    className="bg-[#1A1A1A] text-[#00ff98] border border-[#00ff98] px-6 py-3 rounded-lg hover:bg-[#2A2A2A] transition-colors"
-                  >
-                    Generate
-                  </button>
-                </div>
-              </form>
-              
-              <div className="flex items-center justify-center gap-4">
-                <div className="h-px flex-1 bg-[#2A2A2A]"></div>
+  
+              <div className="mb-8">
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  generateContract();
+                }}>
+                  <div className="flex gap-2">
+                    <input
+                      value={codegenInput}
+                      onChange={handleCodegenInputChange}
+                      className="flex-1 bg-[#1e2124] border border-gray-700 rounded-lg px-4 py-3 text-gray-200 placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-[#00ff98]"
+                      placeholder="Describe your smart contract..."
+                    />
+                    <button
+                      type="submit"
+                      className="px-6 py-3 bg-transparent text-[#00ff98] border border-[#00ff98] rounded-lg hover:bg-[#00ff98] hover:text-black transition-colors font-medium"
+                    >
+                      Generate
+                    </button>
+                  </div>
+                </form>
+              </div>
+  
+              <div className="flex items-center gap-4 mb-8">
+                <div className="h-px flex-1 bg-gray-800"></div>
                 <span className="text-gray-500">or</span>
-                <div className="h-px flex-1 bg-[#2A2A2A]"></div>
+                <div className="h-px flex-1 bg-gray-800"></div>
               </div>
-              
-              <button
-                onClick={manualStart}
-                className="w-full bg-[#1A1A1A] text-gray-300 px-6 py-3 rounded-lg hover:bg-[#2A2A2A] transition-colors border border-[#2A2A2A]"
-              >
-                Start Manually
-              </button>
+  
+              <ContractTemplates 
+                onSelectTemplate={(templateCode: string) => {
+                  setCode(templateCode);
+                  setShowPanels(true);
+                }} 
+              />
+  
+              <div className="mt-8">
+                <button
+                  onClick={manualStart}
+                  className="w-full bg-[#1e2124] text-gray-300 px-6 py-3 rounded-lg hover:bg-[#2a2d31] transition-colors"
+                >
+                  Start from Scratch
+                </button>
+              </div>
             </div>
           </div>
         )}
